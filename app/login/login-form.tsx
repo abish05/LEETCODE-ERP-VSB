@@ -25,7 +25,7 @@ export function LoginForm() {
           name="email"
           type="email"
           autoComplete="username"
-          placeholder="admin@vsbcetc.ac.in"
+          placeholder="Enter the e-mail"
           required
           autoFocus
           disabled={pending}
