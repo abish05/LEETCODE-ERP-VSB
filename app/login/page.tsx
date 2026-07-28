@@ -15,15 +15,7 @@ export const metadata: Metadata = { title: "Administrator sign-in" };
 
 export default function LoginPage() {
   return (
-    <div className="flex min-h-dvh flex-col pb-[44px]">
-      <header className="w-full bg-white border-b flex justify-center py-2 px-4 shadow-sm">
-        <img 
-          src="/login-header.png" 
-          alt="VSB College Header Banner" 
-          className="h-16 md:h-24 w-auto object-contain"
-        />
-      </header>
-      <main className="flex-1 grid lg:grid-cols-[1.05fr_1fr]">
+    <main className="grid min-h-dvh lg:grid-cols-[1.05fr_1fr] pb-[44px]">
       {/* ── Brand panel ─────────────────────────────────────────────── */}
       <section className="brand-gradient relative hidden flex-col justify-between overflow-hidden p-12 lg:flex">
 
@@ -104,10 +96,9 @@ export default function LoginPage() {
         </div>
       </section>
 
-      </main>
       <footer className="fixed bottom-0 left-0 right-0 z-50 bg-[#ffc107] py-3 text-center text-sm font-medium text-black">
         © 2026 VSB College of Engineering Technical Campus | All Rights Reserved. Developed By <span className="font-bold">Abish, Anand</span>
       </footer>
-    </div>
+    </main>
   );
 }
