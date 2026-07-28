@@ -22,16 +22,14 @@ export const ZERO_BUCKET = { id: "b0", label: "0 (Not Started)", min: 0, max: 0 
 
 export const DEPARTMENTS = [
   "CSE",
-  "ECE",
-  "EEE",
-  "IT",
-  "MECH",
-  "CIVIL",
   "AIDS",
   "AIML",
-  "CSBS",
-  "MBA",
-  "MCA",
+  "IT",
+  "ECE",
+  "EEE",
+  "MECH",
+  "CIVIL",
+  "AGRI",
 ] as const;
 
 export const YEARS = ["1", "2", "3", "4"] as const;
