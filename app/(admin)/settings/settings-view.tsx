@@ -2,16 +2,20 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  AlertCircle,
   Clock,
   Copy,
   Database,
   DownloadCloud,
   Loader2,
+  Plus,
   Save,
   ShieldCheck,
   Terminal,
+  Trash2,
   Upload,
   UserCog,
+  UserPlus,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -73,6 +77,13 @@ interface SyncStatusResponse {
     durationMs: number;
     triggeredBy: string;
   }>;
+}
+
+interface AdminUser {
+  id: string;
+  name: string;
+  email: string;
+  createdAt: string;
 }
 
 export function SettingsView({
@@ -419,19 +430,19 @@ export function SettingsView({
           </CardContent>
         </Card>
 
-        {/* ── Administrator ────────────────────────────────────── */}
+        {/* ── Administrator Management ────────────────────────── */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <UserCog className="size-4" />
-              Administrator
+              Administrators
             </CardTitle>
             <CardDescription>
-              This deployment has exactly one account. Students and staff never
-              sign in.
+              Manage admin accounts that can sign in and manage this platform.
+              Students and staff never sign in.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-4">
             <div className="rounded-lg border border-border p-3">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">
                 Signed in as
@@ -445,15 +456,209 @@ export function SettingsView({
               </p>
               <p className="mt-1 text-sm font-medium">{COLLEGE_NAME}</p>
             </div>
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              To change the password, update <code>ADMIN_PASSWORD</code> in your
-              environment and re-run <code>npm run db:seed</code>. The seed
-              script re-hashes the password for the existing account rather than
-              creating a second one.
-            </p>
+
+            <AdminManagement currentEmail={admin.email} />
           </CardContent>
         </Card>
       </div>
+    </div>
+  );
+}
+
+/* ─── Admin Management Sub-Component ────────────────────────────────────── */
+
+function AdminManagement({ currentEmail }: { currentEmail: string }) {
+  const { data, mutate: refreshAdmins } =
+    useApi<{ admins: AdminUser[] }>("/api/admins");
+
+  const [showForm, setShowForm] = useState(false);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  async function handleCreate() {
+    if (!name.trim() || !email.trim() || !password.trim()) {
+      toast.error("All fields are required.");
+      return;
+    }
+    setCreating(true);
+    try {
+      await mutateJson("/api/admins", "POST", { name, email, password });
+      toast.success(`Admin "${name}" created successfully.`);
+      setName("");
+      setEmail("");
+      setPassword("");
+      setShowForm(false);
+      await refreshAdmins();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to create admin.",
+      );
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleDelete(id: string, adminName: string) {
+    if (!confirm(`Are you sure you want to remove "${adminName}" as an admin?`)) {
+      return;
+    }
+    setDeletingId(id);
+    try {
+      await mutateJson("/api/admins", "DELETE", { id });
+      toast.success(`Admin "${adminName}" removed.`);
+      await refreshAdmins();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to delete admin.",
+      );
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  const admins = data?.admins ?? [];
+
+  return (
+    <div className="space-y-3">
+      {/* Admin list */}
+      <div className="max-h-48 overflow-y-auto scrollbar-thin rounded-lg border border-border">
+        <Table>
+          <TableHeader className="sticky top-0">
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Email</TableHead>
+              <TableHead className="w-16 text-right">Action</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {admins.length === 0 ? (
+              <TableRow>
+                <TableCell
+                  colSpan={3}
+                  className="py-6 text-center text-sm text-muted-foreground"
+                >
+                  Loading…
+                </TableCell>
+              </TableRow>
+            ) : (
+              admins.map((a) => (
+                <TableRow key={a.id}>
+                  <TableCell className="text-sm font-medium">
+                    {a.name}
+                    {a.email === currentEmail && (
+                      <Badge variant="navy" className="ml-2">
+                        You
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {a.email}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {a.email !== currentEmail && (
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => handleDelete(a.id, a.name)}
+                        disabled={deletingId === a.id}
+                        aria-label={`Remove ${a.name}`}
+                        className="text-destructive hover:text-destructive"
+                      >
+                        {deletingId === a.id ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="size-3.5" />
+                        )}
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Add new admin form */}
+      {showForm ? (
+        <div className="space-y-3 rounded-lg border border-border bg-secondary/30 p-4">
+          <p className="flex items-center gap-2 text-sm font-semibold">
+            <UserPlus className="size-4" />
+            Add new administrator
+          </p>
+          <div className="space-y-2">
+            <Label htmlFor="admin-name">Full name</Label>
+            <Input
+              id="admin-name"
+              placeholder="Dr. John Doe"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="admin-email">Email</Label>
+            <Input
+              id="admin-email"
+              type="email"
+              placeholder="john@vsbcetc.ac.in"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="admin-password">Password</Label>
+            <Input
+              id="admin-password"
+              type="password"
+              placeholder="Min. 6 characters"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button
+              onClick={handleCreate}
+              disabled={creating}
+              className="flex-1"
+            >
+              {creating ? (
+                <Loader2 className="animate-spin" />
+              ) : (
+                <Plus className="size-4" />
+              )}
+              Create admin
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowForm(false);
+                setName("");
+                setEmail("");
+                setPassword("");
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+          <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+            <AlertCircle className="mt-0.5 size-3 shrink-0" />
+            The new admin will be able to sign in immediately and has full
+            access to the platform.
+          </p>
+        </div>
+      ) : (
+        <Button
+          variant="outline"
+          className="w-full"
+          onClick={() => setShowForm(true)}
+        >
+          <UserPlus className="size-4" />
+          Add new admin
+        </Button>
+      )}
     </div>
   );
 }
