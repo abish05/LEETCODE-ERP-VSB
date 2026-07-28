@@ -1,0 +1,217 @@
+@import "tailwindcss";
+/* Supplies animate-in / fade-in-0 / zoom-in-95 … used by the Radix overlays. */
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Brand palette
+ * ─────────────
+ * Red  #c8102e and Gold #f5a800 are lifted from the college crest.
+ * Navy #12294d matches the institutional site (vsb1.rankuhigher.com) and
+ * anchors the sidebar. Difficulty colours are LeetCode's own, so the charts
+ * read the same way the students' profiles do.
+ */
+:root {
+  --background: #f4f6f9;
+  --foreground: #0f172a;
+
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+
+  --primary: #c8102e;
+  --primary-foreground: #ffffff;
+
+  --secondary: #eef1f6;
+  --secondary-foreground: #1e293b;
+
+  --muted: #eef1f6;
+  --muted-foreground: #64748b;
+
+  --accent: #f5a800;
+  --accent-foreground: #3b2600;
+
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+
+  --success: #059669;
+  --warning: #d97706;
+  --info: #0284c7;
+
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #c8102e;
+
+  --navy: #12294d;
+  --navy-light: #1b3a6b;
+  --gold: #f5a800;
+  --brand-red: #c8102e;
+
+  --easy: #00b8a3;
+  --medium: #ffb800;
+  --hard: #ff375f;
+
+  --radius: 0.75rem;
+}
+
+.dark {
+  --background: #0a1120;
+  --foreground: #e8edf5;
+
+  --card: #101a2e;
+  --card-foreground: #e8edf5;
+
+  --popover: #101a2e;
+  --popover-foreground: #e8edf5;
+
+  --primary: #ef4358;
+  --primary-foreground: #ffffff;
+
+  --secondary: #1a2740;
+  --secondary-foreground: #e8edf5;
+
+  --muted: #1a2740;
+  --muted-foreground: #94a3b8;
+
+  --accent: #f5a800;
+  --accent-foreground: #3b2600;
+
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+
+  --success: #10b981;
+  --warning: #f59e0b;
+  --info: #38bdf8;
+
+  --border: #22304c;
+  --input: #22304c;
+  --ring: #ef4358;
+
+  --navy: #0d1830;
+  --navy-light: #16264a;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-navy: var(--navy);
+  --color-navy-light: var(--navy-light);
+  --color-gold: var(--gold);
+  --color-brand-red: var(--brand-red);
+  --color-easy: var(--easy);
+  --color-medium: var(--medium);
+  --color-hard: var(--hard);
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Tabular figures keep report columns from jittering as values change. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    background-color: color-mix(in srgb, var(--primary) 22%, transparent);
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    border-radius: 9999px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .brand-gradient {
+    background-image: linear-gradient(
+      135deg,
+      var(--navy) 0%,
+      var(--navy-light) 55%,
+      #24406f 100%
+    );
+  }
+
+  .animate-in-up {
+    animation: in-up 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+
+@keyframes in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Recharts leaves a focus outline on the SVG wrapper after every tooltip. */
+.recharts-wrapper:focus,
+.recharts-surface:focus {
+  outline: none;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+  }
+}

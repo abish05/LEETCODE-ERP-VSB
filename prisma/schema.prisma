@@ -1,0 +1,180 @@
+// LeetTrack AI — Prisma schema
+// Database: PostgreSQL (Supabase free tier / any Postgres)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  STUDENT
+  STAFF
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  INVALID_PROFILE
+}
+
+enum SyncStatus {
+  RUNNING
+  SUCCESS
+  PARTIAL
+  FAILED
+}
+
+enum NotificationType {
+  HIGHEST_STREAK
+  TOP_DAILY_SOLVER
+  INACTIVE_USER
+  INVALID_PROFILE
+  USERNAME_CHANGED
+  MILESTONE
+  SYSTEM
+}
+
+/// The single administrator account (seeded, no public sign-up).
+model Admin {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String   @default("Administrator")
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("admins")
+}
+
+/// A tracked person (student or staff). They never log in.
+model User {
+  id               String     @id @default(cuid())
+  registerNo       String     @unique
+  name             String
+  department       String
+  year             String? // "1".."4" for students, null for staff
+  section          String?
+  role             Role       @default(STUDENT)
+  leetcodeUsername String     @unique
+  email            String?
+  status           UserStatus @default(ACTIVE)
+
+  // Denormalised "latest known" values — keeps list/report queries fast.
+  totalSolved   Int      @default(0)
+  easySolved    Int      @default(0)
+  mediumSolved  Int      @default(0)
+  hardSolved    Int      @default(0)
+  todaySolved   Int      @default(0)
+  currentStreak Int      @default(0)
+  maxStreak     Int      @default(0)
+  ranking       Int?
+  contestRating Float?
+  contestsCount Int      @default(0)
+  totalActiveDays Int    @default(0)
+  acceptanceRate  Float?
+  avatarUrl     String?
+  lastSyncedAt  DateTime?
+  syncError     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  snapshots     DailySnapshot[]
+  notifications Notification[]
+
+  @@index([department])
+  @@index([role])
+  @@index([year, section])
+  @@index([totalSolved])
+  @@index([status])
+  @@map("users")
+}
+
+/// One row per user per day — the historical spine of every report.
+model DailySnapshot {
+  id     String   @id @default(cuid())
+  userId String
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date   DateTime @db.Date
+
+  totalSolved   Int   @default(0)
+  easySolved    Int   @default(0)
+  mediumSolved  Int   @default(0)
+  hardSolved    Int   @default(0)
+  todaySolved   Int   @default(0)
+  currentStreak Int   @default(0)
+  maxStreak     Int   @default(0)
+  ranking       Int?
+  contestRating Float?
+  totalActiveDays Int @default(0)
+  acceptanceRate  Float?
+
+  lastSyncedAt DateTime @default(now())
+
+  @@unique([userId, date])
+  @@index([date])
+  @@index([date, totalSolved])
+  @@map("daily_snapshots")
+}
+
+/// Audit log for every scheduler / manual sync run.
+model SyncLog {
+  id          String     @id @default(cuid())
+  startedAt   DateTime   @default(now())
+  finishedAt  DateTime?
+  status      SyncStatus @default(RUNNING)
+  totalUsers  Int        @default(0)
+  succeeded   Int        @default(0)
+  failed      Int        @default(0)
+  durationMs  Int        @default(0)
+  triggeredBy String     @default("cron") // "cron" | "manual" | "import"
+  message     String?
+
+  @@index([startedAt])
+  @@map("sync_logs")
+}
+
+/// Result of one bulk Excel/CSV import.
+model ImportLog {
+  id          String   @id @default(cuid())
+  fileName    String
+  totalRows   Int      @default(0)
+  successful  Int      @default(0)
+  duplicates  Int      @default(0)
+  invalid     Int      @default(0)
+  updated     Int      @default(0)
+  errors      Json?
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("import_logs")
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  type      NotificationType
+  title     String
+  message   String
+  userId    String?
+  user      User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([createdAt])
+  @@index([read])
+  @@map("notifications")
+}
+
+/// Simple key/value store for admin-configurable settings.
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}

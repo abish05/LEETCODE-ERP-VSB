@@ -1,0 +1,74 @@
+name: Daily LeetCode Sync
+
+# 13:30 UTC = 19:00 IST.
+# Change this to the expression shown on the Settings page if you move the
+# sync time. GitHub Actions cron is always UTC.
+on:
+  schedule:
+    - cron: "30 13 * * *"
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Sync only the N stalest profiles (blank = everyone)"
+        required: false
+        type: string
+      dryRun:
+        description: "Fetch and report without writing to the database"
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  # Never let a manual run collide with the nightly schedule.
+  group: leettrack-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Sync LeetCode statistics
+    runs-on: ubuntu-latest
+    # A full college of ~2,000 profiles finishes well inside this.
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply pending migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL || secrets.DATABASE_URL }}
+        run: npx prisma migrate deploy
+
+      - name: Run synchronisation
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL || secrets.DATABASE_URL }}
+          SYNC_CONCURRENCY: "4"
+          SYNC_DELAY_MS: "350"
+          SYNC_MAX_RETRIES: "3"
+        run: |
+          ARGS=""
+          if [ -n "${{ inputs.limit }}" ]; then
+            ARGS="$ARGS --limit ${{ inputs.limit }}"
+          fi
+          if [ "${{ inputs.dryRun }}" = "true" ]; then
+            ARGS="$ARGS --dry-run"
+          fi
+          npm run sync -- $ARGS
+
+      - name: Report failure
+        if: failure()
+        run: |
+          echo "::error::The daily LeetCode sync failed. Check the log above."
+          echo "Common causes: expired DATABASE_URL secret, a paused Supabase"
+          echo "project, or LeetCode rate-limiting the runner's IP."
