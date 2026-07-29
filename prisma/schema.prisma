@@ -56,7 +56,7 @@ model User {
   id               String     @id @default(cuid())
   registerNo       String     @unique
   name             String
-  department       String
+  department       String     @default("Unknown")
   year             String? // "1".."4" for students, null for staff
   section          String?
   role             Role       @default(STUDENT)
