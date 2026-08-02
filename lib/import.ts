@@ -108,12 +108,13 @@ export function parseSpreadsheet(
   }
 
   const sheet = workbook.Sheets[sheetName];
-  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+  const rawMatrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+    header: 1,
     defval: "",
     raw: false,
   });
 
-  if (rows.length === 0) {
+  if (rawMatrix.length === 0) {
     return {
       fileName,
       totalRows: 0,
@@ -124,35 +125,108 @@ export function parseSpreadsheet(
     };
   }
 
-  // ── Map spreadsheet headers onto our field names ──────────────────────
-  const headers = Object.keys(rows[0]);
-  const headerMap = new Map<string, string>(); // field -> actual header
+  // ── Search up to the first 25 rows for the true header row ──────────────
+  let headerRowIdx = 0;
+  let maxMatchedCount = -1;
+  let bestHeaderMap = new Map<string, { colIndex: number; headerName: string }>();
   const detectedColumns: Record<string, string> = {};
 
-  for (const [field, aliases] of Object.entries(IMPORT_COLUMNS)) {
-    const match = headers.find((header) =>
-      (aliases as readonly string[]).includes(normalizeHeader(header)),
-    );
-    if (match) {
-      headerMap.set(field, match);
-      detectedColumns[field] = match;
+  // We match highly specific fields first before generic words like "name" or "role".
+  const priorityFields: (keyof typeof IMPORT_COLUMNS)[] = [
+    "leetcodeUsername",
+    "registerNo",
+    "email",
+    "department",
+    "year",
+    "section",
+    "role",
+    "name",
+  ];
+
+  const searchLimit = Math.min(25, rawMatrix.length);
+  for (let r = 0; r < searchLimit; r++) {
+    const row = rawMatrix[r] || [];
+    if (!Array.isArray(row) || row.length === 0) continue;
+
+    const usedIndices = new Set<number>();
+    const candidateMap = new Map<
+      string,
+      { colIndex: number; headerName: string }
+    >();
+
+    for (const field of priorityFields) {
+      const aliases = IMPORT_COLUMNS[field];
+
+      // 1) Try exact match
+      let matchIndex = row.findIndex((cellVal, idx) => {
+        if (usedIndices.has(idx)) return false;
+        return (aliases as readonly string[]).includes(
+          normalizeHeader(String(cellVal)),
+        );
+      });
+
+      // 2) Try startsWith match (e.g. "name of the student (initial at the last)")
+      if (matchIndex === -1) {
+        matchIndex = row.findIndex((cellVal, idx) => {
+          if (usedIndices.has(idx)) return false;
+          const norm = normalizeHeader(String(cellVal));
+          if (!norm) return false;
+          return aliases.some((alias) => norm.startsWith(alias));
+        });
+      }
+
+      // 3) Try substring/word inclusion match (e.g. "student leetcode id url")
+      if (matchIndex === -1) {
+        matchIndex = row.findIndex((cellVal, idx) => {
+          if (usedIndices.has(idx)) return false;
+          const norm = ` ${normalizeHeader(String(cellVal))} `;
+          if (norm.trim() === "") return false;
+          return aliases.some((alias) => norm.includes(` ${alias} `));
+        });
+      }
+
+      if (matchIndex !== -1) {
+        usedIndices.add(matchIndex);
+        candidateMap.set(field, {
+          colIndex: matchIndex,
+          headerName: String(row[matchIndex] || field).trim(),
+        });
+      }
+    }
+
+    // Prefer the row that matches the greatest number of target columns.
+    if (candidateMap.size > maxMatchedCount) {
+      maxMatchedCount = candidateMap.size;
+      headerRowIdx = r;
+      bestHeaderMap = candidateMap;
     }
   }
 
-  const required = ["registerNo", "name", "department", "leetcodeUsername"];
+  for (const [field, meta] of bestHeaderMap.entries()) {
+    detectedColumns[field] = meta.headerName;
+  }
+
+  const required: (keyof typeof IMPORT_COLUMNS)[] = [
+    "registerNo",
+    "name",
+    "department",
+    "leetcodeUsername",
+  ];
   const missingColumns = required
-    .filter((field) => !headerMap.has(field))
+    .filter((field) => !bestHeaderMap.has(field))
     .map((field) => {
       const label = IMPORT_TEMPLATE_HEADERS.find(
-        (h) => normalizeHeader(h) === (IMPORT_COLUMNS as never)[field][0],
+        (h) => normalizeHeader(h) === IMPORT_COLUMNS[field][0],
       );
       return label ?? field;
     });
 
+  const totalDataRows = Math.max(0, rawMatrix.length - (headerRowIdx + 1));
+
   if (missingColumns.length > 0) {
     return {
       fileName,
-      totalRows: rows.length,
+      totalRows: totalDataRows,
       valid: [],
       issues: [],
       missingColumns,
@@ -160,9 +234,9 @@ export function parseSpreadsheet(
     };
   }
 
-  const get = (row: Record<string, unknown>, field: string): string => {
-    const header = headerMap.get(field);
-    return header ? cell(row[header]) : "";
+  const get = (row: unknown[], field: keyof typeof IMPORT_COLUMNS): string => {
+    const meta = bestHeaderMap.get(field);
+    return meta ? cell(row[meta.colIndex]) : "";
   };
 
   const valid: ParsedRow[] = [];
@@ -171,8 +245,11 @@ export function parseSpreadsheet(
   const seenRegisterNos = new Set<string>();
   const seenUsernames = new Set<string>();
 
-  rows.forEach((row, index) => {
-    const rowNumber = index + 2; // +1 for header, +1 for 1-based rows
+  for (let r = headerRowIdx + 1; r < rawMatrix.length; r++) {
+    const row = rawMatrix[r];
+    if (!Array.isArray(row)) continue;
+
+    const rowNumber = r + 1; // 1-based line number in Excel
 
     const registerNo = get(row, "registerNo").toUpperCase();
     const name = get(row, "name");
@@ -181,34 +258,55 @@ export function parseSpreadsheet(
     const leetcodeUsername = sanitizeUsername(rawUsername);
 
     // Skip fully blank rows — trailing empties are extremely common in Excel.
-    if (!registerNo && !name && !rawUsername) return;
+    if (!registerNo && !name && !rawUsername && !department) continue;
 
     const reject = (reason: string, kind: RowIssue["kind"] = "invalid") => {
-      issues.push({ rowNumber, registerNo, leetcodeUsername: rawUsername, reason, kind });
+      issues.push({
+        rowNumber,
+        registerNo,
+        leetcodeUsername: rawUsername,
+        reason,
+        kind,
+      });
     };
 
-    if (!registerNo) return reject("Register number is empty");
-    if (!name) return reject("Name is empty");
-    if (!department) return reject("Department is empty");
-    if (!rawUsername) return reject("LeetCode username is empty");
+    if (!registerNo) {
+      reject("Register number is empty");
+      continue;
+    }
+    if (!name) {
+      reject("Name is empty");
+      continue;
+    }
+    if (!department) {
+      reject("Department is empty");
+      continue;
+    }
+    if (!rawUsername) {
+      reject("LeetCode username is empty");
+      continue;
+    }
     if (!isValidUsername(leetcodeUsername)) {
-      return reject(
+      reject(
         `"${rawUsername}" is not a valid LeetCode username (letters, digits, . _ - only)`,
       );
+      continue;
     }
 
     if (seenRegisterNos.has(registerNo)) {
-      return reject(
+      reject(
         `Register number ${registerNo} appears more than once in this file`,
         "duplicate",
       );
+      continue;
     }
     const usernameKey = leetcodeUsername.toLowerCase();
     if (seenUsernames.has(usernameKey)) {
-      return reject(
+      reject(
         `LeetCode username "${leetcodeUsername}" appears more than once in this file`,
         "duplicate",
       );
+      continue;
     }
 
     seenRegisterNos.add(registerNo);
@@ -227,11 +325,11 @@ export function parseSpreadsheet(
       leetcodeUsername,
       email: get(row, "email") || null,
     });
-  });
+  }
 
   return {
     fileName,
-    totalRows: rows.length,
+    totalRows: totalDataRows,
     valid,
     issues,
     missingColumns: [],

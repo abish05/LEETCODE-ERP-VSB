@@ -150,10 +150,35 @@ export function sanitizeUsername(value: string): string {
   let name = value.trim();
   // Admins routinely paste the full profile URL instead of the handle.
   const urlMatch = name.match(
-    /^(?:https?:\/\/)?(?:www\.)?leetcode\.com(?:\/[a-z]{2})?\/u(?:ser)?\/([^/?#]+)/i,
+    /^(?:https?:\/\/)?(?:www\.)?leetcode\.com(?:\/[a-z]{2})?\/u(?:ser)?\/([A-Za-z0-9_.-]+)/i,
   );
-  if (urlMatch) name = urlMatch[1];
-  return name.replace(/^@/, "").replace(/\/+$/, "").trim();
+  if (urlMatch) {
+    name = urlMatch[1];
+  } else {
+    const directMatch = name.match(
+      /^(?:https?:\/\/)?(?:www\.)?leetcode\.com\/([A-Za-z0-9_.-]+)/i,
+    );
+    if (
+      directMatch &&
+      ![
+        "u",
+        "user",
+        "problem",
+        "problems",
+        "discuss",
+        "contest",
+        "explore",
+      ].includes(directMatch[1].toLowerCase())
+    ) {
+      name = directMatch[1];
+    }
+  }
+  // Remove leading @ and any trailing slashes, pipes, or non-username characters
+  return name
+    .replace(/^@+/, "")
+    .replace(/[^A-Za-z0-9_.-]+$/, "")
+    .replace(/^[^A-Za-z0-9_.-]+/, "")
+    .trim();
 }
 
 /** Seconds-since-epoch for UTC midnight of the given day. */

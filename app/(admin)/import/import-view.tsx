@@ -58,6 +58,7 @@ export function ImportView() {
   const [updateExisting, setUpdateExisting] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<ImportSummary | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -73,12 +74,14 @@ export function ImportView() {
     }
     setFile(next);
     setResult(null);
+    setError(null);
   }
 
   async function upload() {
     if (!file) return;
     setUploading(true);
     setResult(null);
+    setError(null);
 
     const body = new FormData();
     body.append("file", file);
@@ -103,10 +106,11 @@ export function ImportView() {
       } else {
         toast.warning("No records were added. Check the issues listed below.");
       }
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "The import failed.",
-      );
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "The import failed.";
+      setError(message);
+      toast.error(message);
     } finally {
       setUploading(false);
     }
@@ -115,6 +119,7 @@ export function ImportView() {
   function reset() {
     setFile(null);
     setResult(null);
+    setError(null);
     if (inputRef.current) inputRef.current.value = "";
   }
 
@@ -263,6 +268,22 @@ export function ImportView() {
               </Button>
             </CardContent>
           </Card>
+
+          {error ? (
+            <Card className="border-destructive/30 bg-destructive/5 text-foreground">
+              <CardContent className="flex items-start gap-3 p-4">
+                <AlertTriangle className="mt-0.5 size-5 shrink-0 text-destructive" />
+                <div>
+                  <p className="font-semibold text-destructive">
+                    Import Failed
+                  </p>
+                  <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                    {error}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
 
           {result ? <ImportResult result={result} /> : null}
         </div>
