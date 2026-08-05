@@ -48,6 +48,7 @@ export function SyncButton({
 
     const totals = { synced: 0, failed: 0, invalid: 0 };
     const startedAt = Date.now();
+    const startedBefore = new Date().toISOString();
     let prevRemaining = -1;
 
     try {
@@ -57,6 +58,7 @@ export function SyncButton({
       for (let batch = 0; batch < MAX_BATCHES; batch++) {
         const result = await mutateJson<SyncResponse>("/api/sync", "POST", {
           userIds,
+          startedBefore: single ? undefined : startedBefore,
         });
 
         totals.synced += result.succeeded;

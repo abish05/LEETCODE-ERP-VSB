@@ -19,6 +19,13 @@ export interface SyncOptions {
    * zero; the GitHub Actions job leaves this unset and does the lot in one go.
    */
   limit?: number;
+  /**
+   * Cursor for multi-batch manual syncs. The client sends the ISO timestamp of
+   * the moment the user clicked "Sync now". The server only picks users whose
+   * `lastAttemptAt` is before this moment (or NULL), guaranteeing each user is
+   * processed exactly once per click — even if cron already ran today.
+   */
+  startedBefore?: Date;
   concurrency?: number;
   delayMs?: number;
   maxRetries?: number;
@@ -47,17 +54,18 @@ export interface SyncSummary {
 }
 
 /**
- * Trackable users not yet *attempted* today.
+ * Trackable users not yet *attempted* since `cursor`.
  *
- * Deliberately keyed on `lastAttemptAt`, not `lastSyncedAt`: this number drives
- * the client's "keep going until zero" loop, so it has to fall monotonically
- * even when a profile fails every single time.
+ * When `cursor` is omitted, falls back to UTC midnight (the cron default).
+ * For manual syncs the client passes the moment the user clicked "Sync now"
+ * so the count drops monotonically even if cron already ran today.
  */
-async function countPending(): Promise<number> {
+async function countPending(cursor?: Date): Promise<number> {
+  const cutoff = cursor ?? utcMidnight();
   return prisma.user.count({
     where: {
       status: { not: "INVALID_PROFILE" },
-      OR: [{ lastAttemptAt: null }, { lastAttemptAt: { lt: utcMidnight() } }],
+      OR: [{ lastAttemptAt: null }, { lastAttemptAt: { lt: cutoff } }],
     },
   });
 }
@@ -135,6 +143,7 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncSummary> {
     triggeredBy = "manual",
     userIds,
     limit,
+    startedBefore,
     concurrency = Number(process.env.SYNC_CONCURRENCY ?? 3),
     delayMs = Number(process.env.SYNC_DELAY_MS ?? 0),
     maxRetries = Number(process.env.SYNC_MAX_RETRIES ?? 3),
@@ -170,6 +179,12 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncSummary> {
     ],
   };
 
+  // For manual sync with a cursor (startedBefore), only pick users whose
+  // lastAttemptAt predates the moment the admin clicked "Sync now". This
+  // guarantees each user is processed exactly once per click, even if cron
+  // already ran today or the user clicks Sync twice.
+  const manualCutoff = startedBefore ?? new Date();
+
   const whereClause: Prisma.UserWhereInput = userIds?.length
     ? { id: { in: userIds } }
     : triggeredBy === "cron"
@@ -184,7 +199,17 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncSummary> {
             },
           ],
         }
-      : trackable;
+      : {
+          AND: [
+            trackable,
+            {
+              OR: [
+                { lastAttemptAt: null },
+                { lastAttemptAt: { lt: manualCutoff } },
+              ],
+            },
+          ],
+        };
 
   const users = (await prisma.user.findMany({
     where: whereClause,
@@ -447,7 +472,7 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncSummary> {
     succeeded,
     failed,
     invalidProfiles,
-    remaining: await countPending(),
+    remaining: await countPending(startedBefore),
     durationMs,
     status,
     errors: errors.slice(0, 100),

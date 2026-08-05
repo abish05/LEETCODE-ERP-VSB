@@ -18,6 +18,8 @@ const DEFAULT_BATCH = 90;
 const bodySchema = z.object({
   userIds: z.array(z.string()).max(500).optional(),
   limit: z.number().int().min(1).max(500).optional(),
+  /** ISO timestamp cursor — the moment the admin clicked "Sync now". */
+  startedBefore: z.string().datetime().optional(),
 });
 
 function constantTimeEquals(a: string, b: string): boolean {
@@ -62,12 +64,13 @@ export async function POST(request: NextRequest) {
       return badRequest("Validation failed", parsed.error.flatten());
     }
 
-    const { userIds, limit } = parsed.data;
+    const { userIds, limit, startedBefore } = parsed.data;
 
     const summary = await runSync({
       triggeredBy: "manual",
       userIds,
       limit: userIds?.length ? undefined : (limit ?? DEFAULT_BATCH),
+      startedBefore: startedBefore ? new Date(startedBefore) : undefined,
     });
 
     return ok(summary);
