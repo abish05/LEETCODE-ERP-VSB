@@ -78,7 +78,12 @@ model User {
   totalActiveDays Int    @default(0)
   acceptanceRate  Float?
   avatarUrl     String?
+  /// Last time LeetCode was read *successfully*. Drives staleness reporting.
   lastSyncedAt  DateTime?
+  /// Last time a sync was *attempted*, success or not. Drives batch ordering,
+  /// so a permanently failing profile can never stall the queue — while
+  /// `lastSyncedAt` stays honest about how old the numbers really are.
+  lastAttemptAt DateTime?
   syncError     String?
 
   createdAt DateTime @default(now())
@@ -92,6 +97,7 @@ model User {
   @@index([year, section])
   @@index([totalSolved])
   @@index([status])
+  @@index([lastAttemptAt])
   @@map("users")
 }
 

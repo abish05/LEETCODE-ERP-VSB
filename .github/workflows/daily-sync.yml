@@ -64,9 +64,13 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL || secrets.DATABASE_URL }}
-          SYNC_CONCURRENCY: "4"
-          SYNC_DELAY_MS: "350"
+          # 20 profiles per GraphQL request, 3 requests in flight — a full
+          # college is ~45 requests instead of ~900, so no stagger is needed.
+          SYNC_BATCH_SIZE: "20"
+          SYNC_CONCURRENCY: "3"
+          SYNC_DELAY_MS: "0"
           SYNC_MAX_RETRIES: "3"
+          SYNC_RECHECK_INVALID_DAYS: "7"
         run: |
           ARGS=""
           if [ -n "${{ inputs.limit }}" ]; then

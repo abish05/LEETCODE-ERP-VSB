@@ -1,7 +1,11 @@
 import { Prisma, type Role } from "@prisma/client";
 
 import { prisma } from "./prisma";
-import { fetchLeetCodeStats, type LeetCodeStats } from "./leetcode";
+import {
+  DEFAULT_BATCH_SIZE,
+  fetchLeetCodeStatsBatch,
+  type LeetCodeStats,
+} from "./leetcode";
 import { mapWithConcurrency, sleep, utcMidnight } from "./utils";
 import { INACTIVE_THRESHOLD_DAYS, SETTING_KEYS } from "./constants";
 
@@ -18,6 +22,14 @@ export interface SyncOptions {
   concurrency?: number;
   delayMs?: number;
   maxRetries?: number;
+  /** Profiles per GraphQL request. See DEFAULT_BATCH_SIZE; 1 disables batching. */
+  batchSize?: number;
+  /**
+   * Also re-check INVALID_PROFILE users whose last attempt is older than this
+   * many days. Without it a single transient "user does not exist" would drop
+   * a student from tracking permanently.
+   */
+  recheckInvalidAfterDays?: number;
   onProgress?: (done: number, total: number) => void;
 }
 
@@ -34,17 +46,42 @@ export interface SyncSummary {
   errors: Array<{ username: string; name: string; error: string }>;
 }
 
-/** Users with no successful sync since UTC midnight today. */
+/**
+ * Trackable users not yet *attempted* today.
+ *
+ * Deliberately keyed on `lastAttemptAt`, not `lastSyncedAt`: this number drives
+ * the client's "keep going until zero" loop, so it has to fall monotonically
+ * even when a profile fails every single time.
+ */
 async function countPending(): Promise<number> {
   return prisma.user.count({
     where: {
       status: { not: "INVALID_PROFILE" },
-      OR: [
-        { lastSyncedAt: null },
-        { lastSyncedAt: { lt: utcMidnight() } },
-      ],
+      OR: [{ lastAttemptAt: null }, { lastAttemptAt: { lt: utcMidnight() } }],
     },
   });
+}
+
+/**
+ * A serverless function that is killed mid-run (Vercel caps at 60 s) leaves its
+ * SyncLog stuck on RUNNING, which makes the UI report a sync in flight forever.
+ * Anything still RUNNING after this long is certainly dead.
+ */
+const STALE_RUN_MS = 15 * 60_000;
+
+async function closeStaleRuns(): Promise<number> {
+  const { count } = await prisma.syncLog.updateMany({
+    where: {
+      status: "RUNNING",
+      startedAt: { lt: new Date(Date.now() - STALE_RUN_MS) },
+    },
+    data: {
+      status: "FAILED",
+      finishedAt: new Date(),
+      message: "Run did not finish — most likely the function timed out.",
+    },
+  });
+  return count;
 }
 
 type TrackedUser = {
@@ -98,30 +135,56 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncSummary> {
     triggeredBy = "manual",
     userIds,
     limit,
-    concurrency = Number(process.env.SYNC_CONCURRENCY ?? 4),
-    delayMs = Number(process.env.SYNC_DELAY_MS ?? 350),
+    concurrency = Number(process.env.SYNC_CONCURRENCY ?? 3),
+    delayMs = Number(process.env.SYNC_DELAY_MS ?? 0),
     maxRetries = Number(process.env.SYNC_MAX_RETRIES ?? 3),
+    batchSize = Number(process.env.SYNC_BATCH_SIZE ?? DEFAULT_BATCH_SIZE),
+    recheckInvalidAfterDays = Number(process.env.SYNC_RECHECK_INVALID_DAYS ?? 7),
     onProgress,
   } = options;
 
   const startedAt = Date.now();
   const today = utcMidnight();
 
+  await closeStaleRuns();
+
   // Build the WHERE clause based on the trigger:
   //  - explicit userIds → exactly those users (single-profile refresh)
   //  - cron → only users not yet synced today (avoid re-doing work)
   //  - manual (dashboard "Sync now") → all users except INVALID_PROFILE
+  // Invalid handles are skipped by default, but re-tried occasionally so a
+  // one-off false "does not exist" cannot drop a student forever.
+  const recheckCutoff = new Date(
+    Date.now() - Math.max(1, recheckInvalidAfterDays) * 86_400_000,
+  );
+  const trackable: Prisma.UserWhereInput = {
+    OR: [
+      { status: { not: "INVALID_PROFILE" } },
+      {
+        status: "INVALID_PROFILE",
+        OR: [
+          { lastAttemptAt: null },
+          { lastAttemptAt: { lt: recheckCutoff } },
+        ],
+      },
+    ],
+  };
+
   const whereClause: Prisma.UserWhereInput = userIds?.length
     ? { id: { in: userIds } }
     : triggeredBy === "cron"
       ? {
-          status: { not: "INVALID_PROFILE" },
-          OR: [
-            { lastSyncedAt: null },
-            { lastSyncedAt: { lt: today } },
+          AND: [
+            trackable,
+            {
+              OR: [
+                { lastAttemptAt: null },
+                { lastAttemptAt: { lt: today } },
+              ],
+            },
           ],
         }
-      : { status: { not: "INVALID_PROFILE" } };
+      : trackable;
 
   const users = (await prisma.user.findMany({
     where: whereClause,
@@ -138,7 +201,7 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncSummary> {
     // Stalest first, so a repeated batch run always makes forward progress.
     orderBy: userIds?.length
       ? { createdAt: "asc" }
-      : [{ lastSyncedAt: { sort: "asc", nulls: "first" } }, { createdAt: "asc" }],
+      : [{ lastAttemptAt: { sort: "asc", nulls: "first" } }, { createdAt: "asc" }],
     ...(limit && !userIds?.length ? { take: limit } : {}),
   })) as TrackedUser[];
 
@@ -180,34 +243,55 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncSummary> {
     | { kind: "missing"; user: TrackedUser; error: string }
     | { kind: "error"; user: TrackedUser; error: string };
 
-  const outcomes = await mapWithConcurrency<TrackedUser, Outcome>(
-    users,
+  // One GraphQL request per batch rather than per student — see
+  // fetchLeetCodeStatsBatch. This is what makes a full college sync finish in
+  // seconds instead of minutes, and cuts requests to LeetCode ~20-fold.
+  const size = Math.max(1, batchSize);
+  const batches: TrackedUser[][] = [];
+  for (let i = 0; i < users.length; i += size) {
+    batches.push(users.slice(i, i + size));
+  }
+
+  const batched = await mapWithConcurrency<TrackedUser[], Outcome[]>(
+    batches,
     Math.max(1, concurrency),
-    async (user, index) => {
-      // Stagger requests so we never burst the endpoint.
+    async (batch, index) => {
       if (delayMs > 0 && index >= concurrency) await sleep(delayMs);
 
-      const result = await fetchLeetCodeStats(user.leetcodeUsername, {
-        maxRetries,
+      const found = await fetchLeetCodeStatsBatch(
+        batch.map((user) => user.leetcodeUsername),
+        { maxRetries },
+      );
+
+      completed += batch.length;
+      onProgress?.(Math.min(completed, users.length), users.length);
+
+      return batch.map((user): Outcome => {
+        const result = found.get(user.leetcodeUsername);
+
+        // Defensive: a missing entry means the alias never came back. Treat it
+        // as transient so the profile keeps its last good numbers.
+        if (!result) {
+          return { kind: "error", user, error: "No response for this profile" };
+        }
+        if (!result.ok) {
+          return result.notFound
+            ? { kind: "missing", user, error: result.error }
+            : { kind: "error", user, error: result.error };
+        }
+
+        const previousTotal = baseline.get(user.id) ?? result.stats.totalSolved;
+        // Guard against LeetCode briefly under-reporting after a rejudge.
+        const todaySolved = Math.max(
+          0,
+          result.stats.totalSolved - previousTotal,
+        );
+        return { kind: "ok", user, stats: result.stats, todaySolved };
       });
-
-      completed++;
-      onProgress?.(completed, users.length);
-
-      if (!result.ok) {
-        return result.notFound
-          ? { kind: "missing", user, error: result.error }
-          : { kind: "error", user, error: result.error };
-      }
-
-      const previousTotal =
-        baseline.get(user.id) ?? result.stats.totalSolved;
-      // Guard against LeetCode briefly under-reporting after a rejudge.
-      const todaySolved = Math.max(0, result.stats.totalSolved - previousTotal);
-
-      return { kind: "ok", user, stats: result.stats, todaySolved };
     },
   );
+
+  const outcomes = batched.flat();
 
   // ── Apply writes in batches ────────────────────────────────────────────
   const CHUNK = 50;
@@ -252,6 +336,7 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncSummary> {
             data: {
               ...snapshotData,
               lastSyncedAt: new Date(),
+              lastAttemptAt: new Date(),
               avatarUrl: stats.avatarUrl,
               contestsCount: stats.contestsCount,
               status: "ACTIVE",
@@ -286,7 +371,8 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncSummary> {
             data: {
               status: "INVALID_PROFILE",
               syncError: outcome.error,
-              lastSyncedAt: new Date(),
+              // Not lastSyncedAt — nothing was actually read.
+              lastAttemptAt: new Date(),
             },
           }),
         );
@@ -302,14 +388,15 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncSummary> {
           name: outcome.user.name,
           error: outcome.error,
         });
-        // A transient network failure must not wipe the last good numbers,
-        // but we update lastSyncedAt so the batch processor does not loop indefinitely.
+        // A transient failure must not wipe the last good numbers, and must not
+        // pretend the profile was synced. Stamping lastAttemptAt (not
+        // lastSyncedAt) still guarantees the batch queue moves forward.
         operations.push(
           prisma.user.update({
             where: { id: outcome.user.id },
             data: {
               syncError: outcome.error,
-              lastSyncedAt: new Date(),
+              lastAttemptAt: new Date(),
             },
           }),
         );
