@@ -86,6 +86,7 @@ export async function GET() {
       prisma.syncLog.findMany({ orderBy: { startedAt: "desc" }, take: 15 }),
       prisma.user.count({
         where: {
+          status: { not: "INVALID_PROFILE" },
           OR: [
             { lastSyncedAt: null },
             {

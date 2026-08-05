@@ -38,6 +38,7 @@ export interface SyncSummary {
 async function countPending(): Promise<number> {
   return prisma.user.count({
     where: {
+      status: { not: "INVALID_PROFILE" },
       OR: [
         { lastSyncedAt: null },
         { lastSyncedAt: { lt: utcMidnight() } },
@@ -106,15 +107,24 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncSummary> {
   const startedAt = Date.now();
   const today = utcMidnight();
 
-  const users = (await prisma.user.findMany({
-    where: userIds?.length
-      ? { id: { in: userIds } }
-      : {
+  // Build the WHERE clause based on the trigger:
+  //  - explicit userIds → exactly those users (single-profile refresh)
+  //  - cron → only users not yet synced today (avoid re-doing work)
+  //  - manual (dashboard "Sync now") → all users except INVALID_PROFILE
+  const whereClause: Prisma.UserWhereInput = userIds?.length
+    ? { id: { in: userIds } }
+    : triggeredBy === "cron"
+      ? {
+          status: { not: "INVALID_PROFILE" },
           OR: [
             { lastSyncedAt: null },
             { lastSyncedAt: { lt: today } },
           ],
-        },
+        }
+      : { status: { not: "INVALID_PROFILE" } };
+
+  const users = (await prisma.user.findMany({
+    where: whereClause,
     select: {
       id: true,
       name: true,

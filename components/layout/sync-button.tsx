@@ -82,7 +82,7 @@ export function SyncButton({
       const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
       if (totals.synced === 0 && totals.failed === 0 && totals.invalid === 0) {
         toast.success(
-          `All profiles are already up to date for today (${seconds}s).`,
+          `No profiles to sync (${seconds}s).`,
           { id: toastId },
         );
       } else if (totals.failed === 0) {
