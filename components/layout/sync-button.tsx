@@ -48,6 +48,7 @@ export function SyncButton({
 
     const totals = { synced: 0, failed: 0, invalid: 0 };
     const startedAt = Date.now();
+    let prevRemaining = -1;
 
     try {
       // A full sync is processed in server-side batches (each call has to
@@ -62,7 +63,15 @@ export function SyncButton({
         totals.failed += result.failed;
         totals.invalid += result.invalidProfiles;
 
-        if (single || result.remaining === 0 || result.total === 0) break;
+        if (
+          single ||
+          result.remaining === 0 ||
+          result.total === 0 ||
+          result.remaining === prevRemaining
+        ) {
+          break;
+        }
+        prevRemaining = result.remaining;
 
         toast.loading(
           `Synced ${totals.synced.toLocaleString("en-IN")} profiles · ${result.remaining.toLocaleString("en-IN")} remaining…`,
@@ -71,7 +80,12 @@ export function SyncButton({
       }
 
       const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
-      if (totals.failed === 0) {
+      if (totals.synced === 0 && totals.failed === 0 && totals.invalid === 0) {
+        toast.success(
+          `All profiles are already up to date for today (${seconds}s).`,
+          { id: toastId },
+        );
+      } else if (totals.failed === 0) {
         toast.success(
           `Synced ${totals.synced.toLocaleString("en-IN")} profile${totals.synced === 1 ? "" : "s"} in ${seconds}s.`,
           { id: toastId },

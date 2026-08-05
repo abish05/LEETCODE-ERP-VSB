@@ -107,7 +107,14 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncSummary> {
   const today = utcMidnight();
 
   const users = (await prisma.user.findMany({
-    where: userIds?.length ? { id: { in: userIds } } : undefined,
+    where: userIds?.length
+      ? { id: { in: userIds } }
+      : {
+          OR: [
+            { lastSyncedAt: null },
+            { lastSyncedAt: { lt: today } },
+          ],
+        },
     select: {
       id: true,
       name: true,
@@ -285,11 +292,15 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncSummary> {
           name: outcome.user.name,
           error: outcome.error,
         });
-        // A transient network failure must not wipe the last good numbers.
+        // A transient network failure must not wipe the last good numbers,
+        // but we update lastSyncedAt so the batch processor does not loop indefinitely.
         operations.push(
           prisma.user.update({
             where: { id: outcome.user.id },
-            data: { syncError: outcome.error },
+            data: {
+              syncError: outcome.error,
+              lastSyncedAt: new Date(),
+            },
           }),
         );
       }

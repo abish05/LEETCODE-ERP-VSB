@@ -338,11 +338,11 @@ export async function fetchLeetCodeStats(
       const payload = (await response.json()) as GraphQLResponse;
       const matched = payload.data?.matchedUser;
 
-      if (!matched) {
+      if (!matched || (payload.errors && payload.errors.some(e => /no permission|private|forbidden/i.test(e.message ?? "")))) {
         const message = payload.errors?.[0]?.message ?? "Profile not found";
         // "That user does not exist." is LeetCode's not-found signal.
         const missing =
-          /does not exist|not found/i.test(message) || !payload.errors;
+          /does not exist|not found|no permission|private|forbidden/i.test(message) || !payload.errors || !matched;
         if (missing) {
           return { ok: false, notFound: true, error: message };
         }
