@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { Toaster } from "sonner";
+import { SpeedInsights } from "@vercel/speed-insights/next";
+import { Analytics } from "@vercel/analytics/next";
 
 import { APP_NAME, APP_TAGLINE, COLLEGE_NAME } from "@/lib/constants";
 import "./globals.css";
@@ -60,6 +62,8 @@ export default function RootLayout({
           closeButton
           toastOptions={{ duration: 4000 }}
         />
+        <SpeedInsights />
+        <Analytics />
       </body>
     </html>
   );
