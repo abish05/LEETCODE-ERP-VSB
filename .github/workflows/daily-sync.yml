@@ -32,17 +32,28 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
 
+      # `npm ci` is preferred (reproducible), but the lockfile is generated on
+      # macOS and npm omits Linux-only optional dependencies from it — notably
+      # @emnapi/core, pulled in by unrs-resolver via eslint-config-next. On the
+      # Ubuntu runner that makes `npm ci` fail with "Missing: @emnapi/core from
+      # lock file". Falling back to `npm install` resolves the tree for this
+      # platform instead of aborting.
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --no-audit --no-fund || npm install --no-audit --no-fund
 
+      # DIRECT_URL must be Neon's UN-POOLED endpoint (the host without the
+      # "-pooler" suffix). Prisma Migrate takes a session-scoped advisory lock,
+      # and PgBouncer keeps the backend session alive after Prisma disconnects —
+      # so migrating through the pooler leaks the lock and every later migration
+      # hangs with "Timed out trying to acquire a postgres advisory lock".
       - name: Apply pending migrations
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -70,5 +81,8 @@ jobs:
         if: failure()
         run: |
           echo "::error::The daily LeetCode sync failed. Check the log above."
-          echo "Common causes: expired DATABASE_URL secret, a paused Supabase"
-          echo "project, or LeetCode rate-limiting the runner's IP."
+          echo "Common causes:"
+          echo "  - DATABASE_URL / DIRECT_URL secret missing or rotated"
+          echo "  - DIRECT_URL set to the '-pooler' host (leaks the migration"
+          echo "    advisory lock; use the un-pooled Neon endpoint)"
+          echo "  - LeetCode rate-limiting the runner's IP"
