@@ -319,18 +319,15 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncSummary> {
   const outcomes = batched.flat();
 
   // ── Apply writes in batches ────────────────────────────────────────────
-  const CHUNK = 50;
+  // Applied sequentially per user so a unique constraint violation on one
+  // user (e.g. duplicate leetcodeUsername) doesn't fail the entire batch.
   let succeeded = 0;
   let invalidProfiles = 0;
 
-  for (let i = 0; i < outcomes.length; i += CHUNK) {
-    const chunk = outcomes.slice(i, i + CHUNK);
-    const operations: Prisma.PrismaPromise<unknown>[] = [];
-
-    for (const outcome of chunk) {
+  for (const outcome of outcomes) {
+    try {
       if (outcome.kind === "ok") {
         const { user, stats, todaySolved } = outcome;
-        succeeded++;
 
         const snapshotData = {
           totalSolved: stats.totalSolved,
@@ -347,15 +344,12 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncSummary> {
           lastSyncedAt: new Date(),
         };
 
-        operations.push(
+        const userOperations = [
           prisma.dailySnapshot.upsert({
             where: { userId_date: { userId: user.id, date: today } },
             create: { userId: user.id, date: today, ...snapshotData },
             update: snapshotData,
           }),
-        );
-
-        operations.push(
           prisma.user.update({
             where: { id: user.id },
             data: {
@@ -370,7 +364,10 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncSummary> {
               leetcodeUsername: stats.username,
             },
           }),
-        );
+        ];
+
+        await prisma.$transaction(userOperations);
+        succeeded++;
 
         if (
           stats.username.toLowerCase() !==
@@ -390,17 +387,15 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncSummary> {
           name: outcome.user.name,
           error: outcome.error,
         });
-        operations.push(
-          prisma.user.update({
-            where: { id: outcome.user.id },
-            data: {
-              status: "INVALID_PROFILE",
-              syncError: outcome.error,
-              // Not lastSyncedAt — nothing was actually read.
-              lastAttemptAt: new Date(),
-            },
-          }),
-        );
+        await prisma.user.update({
+          where: { id: outcome.user.id },
+          data: {
+            status: "INVALID_PROFILE",
+            syncError: outcome.error,
+            // Not lastSyncedAt — nothing was actually read.
+            lastAttemptAt: new Date(),
+          },
+        });
         notifications.push({
           type: "INVALID_PROFILE",
           title: "Invalid LeetCode profile",
@@ -416,19 +411,37 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncSummary> {
         // A transient failure must not wipe the last good numbers, and must not
         // pretend the profile was synced. Stamping lastAttemptAt (not
         // lastSyncedAt) still guarantees the batch queue moves forward.
-        operations.push(
-          prisma.user.update({
-            where: { id: outcome.user.id },
-            data: {
-              syncError: outcome.error,
-              lastAttemptAt: new Date(),
-            },
-          }),
-        );
+        await prisma.user.update({
+          where: { id: outcome.user.id },
+          data: {
+            syncError: outcome.error,
+            lastAttemptAt: new Date(),
+          },
+        });
       }
-    }
+    } catch (e: any) {
+      let errorMessage = e?.message || "Database error during sync";
+      if (e?.code === "P2002") {
+        errorMessage = `Database conflict: another user is already tracking this LeetCode profile (${outcome.kind === "ok" ? outcome.stats.username : outcome.user.leetcodeUsername}).`;
+      }
+      
+      errors.push({
+        username: outcome.user.leetcodeUsername,
+        name: outcome.user.name,
+        error: errorMessage,
+      });
 
-    await prisma.$transaction(operations);
+      // Try to stamp lastAttemptAt so the queue doesn't stall indefinitely on this user
+      try {
+        await prisma.user.update({
+          where: { id: outcome.user.id },
+          data: {
+            syncError: "DB conflict or error during sync",
+            lastAttemptAt: new Date(),
+          },
+        });
+      } catch (_) {}
+    }
   }
 
   await generateNotifications(today, notifications);
