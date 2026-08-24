@@ -47,6 +47,7 @@ model Admin {
   passwordHash String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  lastActive   DateTime?
 
   @@map("admins")
 }

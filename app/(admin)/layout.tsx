@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { auth, signOut } from "@/auth";
 import { AdminShell } from "@/components/layout/admin-shell";
 
+import { AdminHeartbeat } from "@/components/layout/admin-heartbeat";
+
 export default async function AdminLayout({
   children,
 }: {
@@ -20,14 +22,17 @@ export default async function AdminLayout({
   }
 
   return (
-    <AdminShell
-      admin={{
-        name: session.user.name ?? "Administrator",
-        email: session.user.email ?? "",
-      }}
-      signOutAction={handleSignOut}
-    >
-      {children}
-    </AdminShell>
+    <>
+      <AdminHeartbeat />
+      <AdminShell
+        admin={{
+          name: session.user.name ?? "Administrator",
+          email: session.user.email ?? "",
+        }}
+        signOutAction={handleSignOut}
+      >
+        {children}
+      </AdminShell>
+    </>
   );
 }

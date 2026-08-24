@@ -42,7 +42,7 @@ import {
 } from "@/components/ui/table";
 import { COLLEGE_NAME } from "@/lib/constants";
 import { mutateJson, useApi } from "@/lib/hooks";
-import { formatDateTime, formatNumber } from "@/lib/utils";
+import { formatDateTime, formatNumber, timeAgo } from "@/lib/utils";
 
 interface SettingsResponse {
   settings: Record<string, string>;
@@ -84,6 +84,7 @@ interface AdminUser {
   name: string;
   email: string;
   createdAt: string;
+  lastActive: string | null;
 }
 
 export function SettingsView({
@@ -546,7 +547,7 @@ function AdminManagement({ currentEmail }: { currentEmail: string }) {
             ) : (
               admins.map((a) => (
                 <TableRow key={a.id}>
-                  <TableCell className="text-sm font-medium">
+                  <TableCell className="text-sm font-medium align-top">
                     {a.name}
                     {a.email === currentEmail && (
                       <Badge variant="navy" className="ml-2">
@@ -556,8 +557,23 @@ function AdminManagement({ currentEmail }: { currentEmail: string }) {
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
                     {a.email}
+                    <div className="mt-1 flex items-center gap-1.5">
+                      {a.lastActive && new Date(a.lastActive).getTime() > Date.now() - 5 * 60 * 1000 ? (
+                        <>
+                          <span className="relative flex size-2">
+                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex size-2 rounded-full bg-emerald-500"></span>
+                          </span>
+                          <span className="text-[10px] uppercase font-medium tracking-wider text-emerald-600 dark:text-emerald-400">Online Now</span>
+                        </>
+                      ) : (
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
+                          {a.lastActive ? `Last seen: ${timeAgo(a.lastActive)}` : "Never active"}
+                        </span>
+                      )}
+                    </div>
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right align-top">
                     {a.email !== currentEmail && (
                       <Button
                         variant="ghost"
