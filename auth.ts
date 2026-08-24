@@ -36,6 +36,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const ok = await bcrypt.compare(parsed.data.password, hash);
         if (!ok || !admin) return null;
 
+        await prisma.admin.update({
+          where: { id: admin.id },
+          data: { lastLoginAt: new Date() },
+        });
+
         return { id: admin.id, email: admin.email, name: admin.name };
       },
     }),

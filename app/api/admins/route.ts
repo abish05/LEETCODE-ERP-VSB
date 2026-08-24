@@ -14,7 +14,7 @@ export async function GET() {
 
   try {
     const admins = await prisma.admin.findMany({
-      select: { id: true, name: true, email: true, createdAt: true },
+      select: { id: true, name: true, email: true, createdAt: true, lastLoginAt: true },
       orderBy: { createdAt: "asc" },
     });
     return ok({ admins });
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
 
     const admin = await prisma.admin.create({
       data: { name, email, passwordHash },
-      select: { id: true, name: true, email: true, createdAt: true },
+      select: { id: true, name: true, email: true, createdAt: true, lastLoginAt: true },
     });
 
     return ok(admin, { status: 201 });
