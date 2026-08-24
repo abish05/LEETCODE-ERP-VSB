@@ -536,13 +536,22 @@ function AdminManagement({ currentEmail }: { currentEmail: string }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {admins.length === 0 ? (
+            {!data ? (
               <TableRow>
                 <TableCell
                   colSpan={4}
                   className="py-6 text-center text-sm text-muted-foreground"
                 >
                   Loading…
+                </TableCell>
+              </TableRow>
+            ) : admins.length === 0 ? (
+              <TableRow>
+                <TableCell
+                  colSpan={4}
+                  className="py-6 text-center text-sm text-muted-foreground"
+                >
+                  No admins found.
                 </TableCell>
               </TableRow>
             ) : (
