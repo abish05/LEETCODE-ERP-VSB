@@ -84,7 +84,6 @@ interface AdminUser {
   name: string;
   email: string;
   createdAt: string;
-  lastLoginAt?: string | null;
 }
 
 export function SettingsView({
@@ -531,7 +530,6 @@ function AdminManagement({ currentEmail }: { currentEmail: string }) {
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Email</TableHead>
-              <TableHead>Last Online</TableHead>
               <TableHead className="w-16 text-right">Action</TableHead>
             </TableRow>
           </TableHeader>
@@ -558,9 +556,6 @@ function AdminManagement({ currentEmail }: { currentEmail: string }) {
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
                     {a.email}
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {a.lastLoginAt ? formatDateTime(a.lastLoginAt) : "Never"}
                   </TableCell>
                   <TableCell className="text-right">
                     {a.email !== currentEmail && (
