@@ -17,21 +17,29 @@ config();
 const prisma = new PrismaClient();
 
 async function main() {
-  const adminsToSeed = [
-    { email: "abishstk@gmail.com", name: "VSBCETC Administrator", password: "password123" },
-    { email: "admin@vsbcetc.edu.in", name: "ADMIN", password: "password123" },
-    { email: "poorna6493@gmail.com", name: "POORNA CHANDRAN", password: "password123" }
-  ];
+  const email = (process.env.ADMIN_EMAIL ?? "").trim().toLowerCase();
+  const password = process.env.ADMIN_PASSWORD ?? "";
+  const name = process.env.ADMIN_NAME ?? "Administrator";
 
-  for (const adminData of adminsToSeed) {
-    const passwordHash = await bcrypt.hash(adminData.password, 12);
-    const admin = await prisma.admin.upsert({
-      where: { email: adminData.email },
-      create: { email: adminData.email, name: adminData.name, passwordHash },
-      update: { name: adminData.name, passwordHash },
-    });
-    console.log(`✓ Administrator ready: ${admin.email}`);
+  if (!email || !password) {
+    throw new Error(
+      "ADMIN_EMAIL and ADMIN_PASSWORD must be set in .env before seeding.",
+    );
   }
+
+  if (password.length < 8) {
+    throw new Error("ADMIN_PASSWORD must be at least 8 characters long.");
+  }
+
+  const passwordHash = await bcrypt.hash(password, 12);
+
+  const admin = await prisma.admin.upsert({
+    where: { email },
+    create: { email, name, passwordHash },
+    update: { name, passwordHash },
+  });
+
+  console.log(`✓ Administrator ready: ${admin.email}`);
 
   for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
     await prisma.setting.upsert({
@@ -42,6 +50,15 @@ async function main() {
     });
   }
   console.log(`✓ ${Object.keys(DEFAULT_SETTINGS).length} default settings ready`);
+
+  const otherAdmins = await prisma.admin.count({
+    where: { email: { not: email } },
+  });
+  if (otherAdmins > 0) {
+    console.warn(
+      `! ${otherAdmins} other admin account(s) exist. This platform is designed for exactly one.`,
+    );
+  }
 
   const users = await prisma.user.count();
   console.log(`\nDatabase currently tracks ${users} user(s).`);

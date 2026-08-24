@@ -41,13 +41,13 @@ enum NotificationType {
 
 /// The single administrator account (seeded, no public sign-up).
 model Admin {
-  id           String    @id @default(cuid())
-  email        String    @unique
-  name         String    @default("Administrator")
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String   @default("Administrator")
   passwordHash String
   lastLoginAt  DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@map("admins")
 }
