@@ -95,3 +95,34 @@ export async function DELETE(request: NextRequest) {
     return handleError(error);
   }
 }
+
+const updateSchema = z.object({
+  id: z.string().min(1),
+  password: z.string().min(6, "Password must be at least 6 characters").max(72),
+});
+
+/** PATCH /api/admins — update an admin's password. */
+export async function PATCH(request: NextRequest) {
+  const { response } = await requireAdmin();
+  if (response) return response;
+
+  try {
+    const parsed = updateSchema.safeParse(await request.json());
+    if (!parsed.success) {
+      return badRequest("Validation failed", parsed.error.flatten());
+    }
+
+    const { id, password } = parsed.data;
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    const admin = await prisma.admin.update({
+      where: { id },
+      data: { passwordHash },
+      select: { id: true, name: true, email: true, createdAt: true, lastLoginAt: true },
+    });
+
+    return ok(admin);
+  } catch (error) {
+    return handleError(error);
+  }
+}
