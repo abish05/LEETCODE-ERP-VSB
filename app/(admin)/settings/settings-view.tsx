@@ -7,6 +7,7 @@ import {
   Copy,
   Database,
   DownloadCloud,
+  Key,
   Loader2,
   Plus,
   Save,
@@ -84,6 +85,7 @@ interface AdminUser {
   name: string;
   email: string;
   createdAt: string;
+  lastLoginAt?: string | null;
 }
 
 export function SettingsView({
@@ -519,6 +521,25 @@ function AdminManagement({ currentEmail }: { currentEmail: string }) {
     }
   }
 
+  async function handleChangePassword(id: string, adminName: string) {
+    const newPassword = prompt(`Enter new password for "${adminName}" (min 6 characters):`);
+    if (newPassword === null) return;
+    
+    if (newPassword.trim().length < 6) {
+      toast.error("Password must be at least 6 characters long.");
+      return;
+    }
+
+    try {
+      await mutateJson("/api/admins", "PATCH", { id, password: newPassword.trim() });
+      toast.success(`Password updated for "${adminName}".`);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to change password."
+      );
+    }
+  }
+
   const admins = data?.admins ?? [];
 
   return (
@@ -530,6 +551,7 @@ function AdminManagement({ currentEmail }: { currentEmail: string }) {
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Email</TableHead>
+              <TableHead>Last Online</TableHead>
               <TableHead className="w-16 text-right">Action</TableHead>
             </TableRow>
           </TableHeader>
@@ -537,7 +559,7 @@ function AdminManagement({ currentEmail }: { currentEmail: string }) {
             {!data ? (
               <TableRow>
                 <TableCell
-                  colSpan={3}
+                  colSpan={4}
                   className="py-6 text-center text-sm text-muted-foreground"
                 >
                   Loading…
@@ -546,7 +568,7 @@ function AdminManagement({ currentEmail }: { currentEmail: string }) {
             ) : admins.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={3}
+                  colSpan={4}
                   className="py-6 text-center text-sm text-muted-foreground"
                 >
                   No admins found.
@@ -566,23 +588,37 @@ function AdminManagement({ currentEmail }: { currentEmail: string }) {
                   <TableCell className="text-xs text-muted-foreground">
                     {a.email}
                   </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {a.lastLoginAt ? formatDateTime(a.lastLoginAt) : "Never"}
+                  </TableCell>
                   <TableCell className="text-right">
-                    {a.email !== currentEmail && (
+                    <div className="flex justify-end gap-1">
                       <Button
                         variant="ghost"
                         size="icon-sm"
-                        onClick={() => handleDelete(a.id, a.name)}
-                        disabled={deletingId === a.id}
-                        aria-label={`Remove ${a.name}`}
-                        className="text-destructive hover:text-destructive"
+                        onClick={() => handleChangePassword(a.id, a.name)}
+                        aria-label={`Change password for ${a.name}`}
+                        className="text-muted-foreground hover:text-foreground"
                       >
-                        {deletingId === a.id ? (
-                          <Loader2 className="size-3.5 animate-spin" />
-                        ) : (
-                          <Trash2 className="size-3.5" />
-                        )}
+                        <Key className="size-3.5" />
                       </Button>
-                    )}
+                      {a.email !== currentEmail && (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => handleDelete(a.id, a.name)}
+                          disabled={deletingId === a.id}
+                          aria-label={`Remove ${a.name}`}
+                          className="text-destructive hover:text-destructive"
+                        >
+                          {deletingId === a.id ? (
+                            <Loader2 className="size-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="size-3.5" />
+                          )}
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
