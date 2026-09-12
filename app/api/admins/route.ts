@@ -25,7 +25,7 @@ export async function GET() {
 
 const createSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120),
-  email: z.string().trim().email("Invalid email address"),
+  email: z.string().trim().toLowerCase().email("Invalid email address"),
   password: z.string().min(6, "Password must be at least 6 characters").max(72),
 });
 
@@ -91,6 +91,68 @@ export async function DELETE(request: NextRequest) {
 
     await prisma.admin.delete({ where: { id: parsed.data.id } });
     return ok({ deleted: true });
+  } catch (error) {
+    return handleError(error);
+  }
+}
+
+const updateSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().trim().min(1, "Name is required").max(120).optional(),
+  email: z.string().trim().toLowerCase().email("Invalid email address").optional(),
+  password: z.string().min(6, "Password must be at least 6 characters").max(72).optional().or(z.literal("")),
+});
+
+/** PATCH /api/admins — update an existing admin account. */
+export async function PATCH(request: NextRequest) {
+  const { response } = await requireAdmin();
+  if (response) return response;
+
+  try {
+    const parsed = updateSchema.safeParse(await request.json());
+    if (!parsed.success) {
+      return badRequest("Validation failed", parsed.error.flatten());
+    }
+
+    const { id, name, email, password } = parsed.data;
+
+    // Check if target admin exists
+    const target = await prisma.admin.findUnique({
+      where: { id },
+    });
+
+    if (!target) {
+      return badRequest("Admin not found.");
+    }
+
+    // Check email uniqueness if email is being updated
+    if (email && email !== target.email) {
+      const existingEmail = await prisma.admin.findUnique({
+        where: { email },
+      });
+      if (existingEmail) {
+        return badRequest("An administrator with this email already exists.");
+      }
+    }
+
+    const dataToUpdate: any = {};
+    if (name) dataToUpdate.name = name;
+    if (email) dataToUpdate.email = email;
+    if (password) {
+      dataToUpdate.passwordHash = await bcrypt.hash(password, 12);
+    }
+
+    if (Object.keys(dataToUpdate).length === 0) {
+      return badRequest("No fields to update.");
+    }
+
+    const updatedAdmin = await prisma.admin.update({
+      where: { id },
+      data: dataToUpdate,
+      select: { id: true, name: true, email: true, createdAt: true },
+    });
+
+    return ok(updatedAdmin);
   } catch (error) {
     return handleError(error);
   }

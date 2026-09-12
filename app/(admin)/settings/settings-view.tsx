@@ -8,6 +8,7 @@ import {
   Database,
   DownloadCloud,
   Loader2,
+  Pencil,
   Plus,
   Save,
   ShieldCheck,
@@ -483,6 +484,13 @@ function AdminManagement({ currentEmail }: { currentEmail: string }) {
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  // Edit states
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editPassword, setEditPassword] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+
   async function handleCreate() {
     if (!name.trim() || !email.trim() || !password.trim()) {
       toast.error("All fields are required.");
@@ -524,18 +532,49 @@ function AdminManagement({ currentEmail }: { currentEmail: string }) {
     }
   }
 
+  async function handleUpdate(id: string) {
+    if (!editName.trim() || !editEmail.trim()) {
+      toast.error("Name and email are required.");
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      const payload: Record<string, string> = { id, name: editName, email: editEmail };
+      if (editPassword.trim()) {
+        payload.password = editPassword;
+      }
+      await mutateJson("/api/admins", "PATCH", payload);
+      toast.success("Administrator updated successfully.");
+      setEditingId(null);
+      await refreshAdmins();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update admin.",
+      );
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  function startEditing(admin: AdminUser) {
+    setEditingId(admin.id);
+    setEditName(admin.name);
+    setEditEmail(admin.email);
+    setEditPassword("");
+  }
+
   const admins = data?.admins ?? [];
 
   return (
     <div className="space-y-3">
       {/* Admin list */}
-      <div className="max-h-48 overflow-y-auto scrollbar-thin rounded-lg border border-border">
+      <div className="max-h-64 overflow-y-auto scrollbar-thin rounded-lg border border-border">
         <Table>
-          <TableHeader className="sticky top-0">
+          <TableHeader className="sticky top-0 bg-background z-10">
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Email</TableHead>
-              <TableHead className="w-16 text-right">Action</TableHead>
+              <TableHead className="w-24 text-right">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -584,50 +623,118 @@ function AdminManagement({ currentEmail }: { currentEmail: string }) {
             ) : (
               admins.map((a) => (
                 <TableRow key={a.id}>
-                  <TableCell className="text-sm font-medium align-top">
-                    {a.name}
-                    {a.email === currentEmail && (
-                      <Badge variant="navy" className="ml-2">
-                        You
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {a.email}
-                    <div className="mt-1 flex items-center gap-1.5">
-                      {a.lastActive && new Date(a.lastActive).getTime() > Date.now() - 5 * 60 * 1000 ? (
-                        <>
-                          <span className="relative flex size-2">
-                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
-                            <span className="relative inline-flex size-2 rounded-full bg-emerald-500"></span>
-                          </span>
-                          <span className="text-[10px] uppercase font-medium tracking-wider text-emerald-600 dark:text-emerald-400">Online Now</span>
-                        </>
-                      ) : (
-                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
-                          {a.lastActive ? `Last seen: ${timeAgo(a.lastActive)}` : "Never active"}
-                        </span>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right align-top">
-                    {a.email !== currentEmail && (
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => handleDelete(a.id, a.name)}
-                        disabled={deletingId === a.id}
-                        aria-label={`Remove ${a.name}`}
-                        className="text-destructive hover:text-destructive"
-                      >
-                        {deletingId === a.id ? (
-                          <Loader2 className="size-3.5 animate-spin" />
-                        ) : (
-                          <Trash2 className="size-3.5" />
+                  {editingId === a.id ? (
+                    <TableCell colSpan={3} className="p-4 bg-secondary/20">
+                      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Name</Label>
+                          <Input
+                            className="h-8 text-sm"
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Email</Label>
+                          <Input
+                            className="h-8 text-sm"
+                            type="email"
+                            value={editEmail}
+                            onChange={(e) => setEditEmail(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1.5 sm:col-span-2 lg:col-span-1">
+                          <Label className="text-xs">New Password</Label>
+                          <Input
+                            className="h-8 text-sm"
+                            type="password"
+                            placeholder="Leave blank to keep"
+                            value={editPassword}
+                            onChange={(e) => setEditPassword(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div className="mt-3 flex items-center justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setEditingId(null)}
+                          disabled={savingEdit}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleUpdate(a.id)}
+                          disabled={savingEdit}
+                        >
+                          {savingEdit ? (
+                            <Loader2 className="size-3.5 animate-spin mr-1.5" />
+                          ) : (
+                            <Save className="size-3.5 mr-1.5" />
+                          )}
+                          Save
+                        </Button>
+                      </div>
+                    </TableCell>
+                  ) : (
+                    <>
+                      <TableCell className="text-sm font-medium align-top py-3">
+                        {a.name}
+                        {a.email === currentEmail && (
+                          <Badge variant="navy" className="ml-2">
+                            You
+                          </Badge>
                         )}
-                      </Button>
-                    )}
-                  </TableCell>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground align-top py-3">
+                        {a.email}
+                        <div className="mt-1 flex items-center gap-1.5">
+                          {a.lastActive && new Date(a.lastActive).getTime() > Date.now() - 5 * 60 * 1000 ? (
+                            <>
+                              <span className="relative flex size-2">
+                                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+                                <span className="relative inline-flex size-2 rounded-full bg-emerald-500"></span>
+                              </span>
+                              <span className="text-[10px] uppercase font-medium tracking-wider text-emerald-600 dark:text-emerald-400">Online Now</span>
+                            </>
+                          ) : (
+                            <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
+                              {a.lastActive ? `Last seen: ${timeAgo(a.lastActive)}` : "Never active"}
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right align-top py-2">
+                        <div className="flex justify-end items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => startEditing(a)}
+                            aria-label={`Edit ${a.name}`}
+                          >
+                            <Pencil className="size-3.5 text-muted-foreground" />
+                          </Button>
+                          {a.email !== currentEmail && (
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => handleDelete(a.id, a.name)}
+                              disabled={deletingId === a.id}
+                              aria-label={`Remove ${a.name}`}
+                              className="text-destructive hover:text-destructive"
+                            >
+                              {deletingId === a.id ? (
+                                <Loader2 className="size-3.5 animate-spin" />
+                              ) : (
+                                <Trash2 className="size-3.5" />
+                              )}
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </>
+                  )}
                 </TableRow>
               ))
             )}
