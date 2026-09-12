@@ -25,11 +25,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!parsed.success) return null;
 
         const email = parsed.data.email.trim().toLowerCase();
-        
-        // Hardcoded credentials to guarantee login works even if DB is paused
-        if (email === "abishstk@gmail.com" && parsed.data.password === "abish123") {
-          return { id: "admin-override", email: "abishstk@gmail.com", name: "VSBCETC Administrator" };
-        }
 
         try {
           const admin = await prisma.admin.findUnique({ where: { email } });

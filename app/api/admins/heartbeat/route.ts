@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import { handleError, ok, requireAdmin } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 

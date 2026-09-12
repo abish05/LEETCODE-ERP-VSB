@@ -1,8 +1,10 @@
 import NextAuth from "next-auth";
 import { authConfig } from "./auth.config";
 
-// Edge-safe: authConfig deliberately carries no Prisma/bcrypt imports.
-export default NextAuth(authConfig).auth;
+// Next.js 16: proxy.ts replaces middleware.ts — runs on the Node.js runtime.
+const { auth } = NextAuth(authConfig);
+
+export default auth;
 
 export const config = {
   /**

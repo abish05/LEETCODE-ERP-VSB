@@ -55,8 +55,8 @@ async function main() {
     where: { email: { not: email } },
   });
   if (otherAdmins > 0) {
-    console.warn(
-      `! ${otherAdmins} other admin account(s) exist. This platform is designed for exactly one.`,
+    console.log(
+      `ℹ ${otherAdmins} other admin account(s) also exist in the database.`,
     );
   }
 

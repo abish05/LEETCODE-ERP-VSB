@@ -4,7 +4,7 @@
   "private": true,
   "description": "LeetTrack AI — Enterprise LeetCode Analytics Platform for V.S.B. College of Engineering Technical Campus",
   "engines": {
-    "node": ">=20.0.0"
+    "node": "22.x"
   },
   "scripts": {
     "dev": "next dev",
@@ -20,9 +20,7 @@
     "db:seed": "tsx scripts/seed.ts",
     "sync": "tsx scripts/sync-leetcode.ts"
   },
-  "prisma": {
-    "seed": "tsx scripts/seed.ts"
-  },
+
   "dependencies": {
     "@prisma/client": "^6.2.1",
     "@radix-ui/react-avatar": "^1.1.2",

@@ -469,8 +469,12 @@ export function SettingsView({
 /* ─── Admin Management Sub-Component ────────────────────────────────────── */
 
 function AdminManagement({ currentEmail }: { currentEmail: string }) {
-  const { data, mutate: refreshAdmins } =
-    useApi<{ admins: AdminUser[] }>("/api/admins");
+  const { data, error, isLoading, mutate: refreshAdmins } =
+    useApi<{ admins: AdminUser[] }>("/api/admins", {
+      shouldRetryOnError: true,
+      errorRetryCount: 3,
+      errorRetryInterval: 2000,
+    });
 
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
@@ -535,13 +539,46 @@ function AdminManagement({ currentEmail }: { currentEmail: string }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {admins.length === 0 ? (
+            {isLoading ? (
               <TableRow>
                 <TableCell
                   colSpan={3}
                   className="py-6 text-center text-sm text-muted-foreground"
                 >
-                  Loading…
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="size-4 animate-spin" />
+                    Loading admins…
+                  </span>
+                </TableCell>
+              </TableRow>
+            ) : error ? (
+              <TableRow>
+                <TableCell
+                  colSpan={3}
+                  className="py-6 text-center text-sm text-muted-foreground"
+                >
+                  <div className="flex flex-col items-center gap-2">
+                    <span className="flex items-center gap-1.5 text-destructive">
+                      <AlertCircle className="size-3.5" />
+                      Failed to load admins
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => refreshAdmins()}
+                    >
+                      Retry
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : admins.length === 0 ? (
+              <TableRow>
+                <TableCell
+                  colSpan={3}
+                  className="py-6 text-center text-sm text-muted-foreground"
+                >
+                  No administrators found. Add one below.
                 </TableCell>
               </TableRow>
             ) : (
