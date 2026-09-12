@@ -91,7 +91,7 @@ interface AdminUser {
 export function SettingsView({
   admin,
 }: {
-  admin: { name: string; email: string };
+  admin: { id: string; name: string; email: string };
 }) {
   const { data, mutate } = useApi<SettingsResponse>("/api/settings");
   const { data: sync, mutate: refreshSync } =
@@ -459,7 +459,7 @@ export function SettingsView({
               <p className="mt-1 text-sm font-medium">{COLLEGE_NAME}</p>
             </div>
 
-            <AdminManagement currentEmail={admin.email} />
+            <AdminManagement currentId={admin.id} currentEmail={admin.email} />
           </CardContent>
         </Card>
       </div>
@@ -469,7 +469,7 @@ export function SettingsView({
 
 /* ─── Admin Management Sub-Component ────────────────────────────────────── */
 
-function AdminManagement({ currentEmail }: { currentEmail: string }) {
+function AdminManagement({ currentId, currentEmail }: { currentId: string; currentEmail: string }) {
   const { data, error, isLoading, mutate: refreshAdmins } =
     useApi<{ admins: AdminUser[] }>("/api/admins", {
       shouldRetryOnError: true,
@@ -681,7 +681,7 @@ function AdminManagement({ currentEmail }: { currentEmail: string }) {
                     <>
                       <TableCell className="text-sm font-medium align-top py-3">
                         {a.name}
-                        {a.email === currentEmail && (
+                        {a.id === currentId && (
                           <Badge variant="navy" className="ml-2">
                             You
                           </Badge>
@@ -715,7 +715,7 @@ function AdminManagement({ currentEmail }: { currentEmail: string }) {
                           >
                             <Pencil className="size-3.5 text-muted-foreground" />
                           </Button>
-                          {a.email !== currentEmail && (
+                          {a.id !== currentId && (
                             <Button
                               variant="ghost"
                               size="icon-sm"

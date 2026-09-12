@@ -72,14 +72,14 @@ export async function DELETE(request: NextRequest) {
     // Prevent self-deletion
     const target = await prisma.admin.findUnique({
       where: { id: parsed.data.id },
-      select: { email: true },
+      select: { id: true },
     });
 
     if (!target) {
       return badRequest("Admin not found.");
     }
 
-    if (target.email === session.user?.email) {
+    if (target.id === session.user?.id) {
       return badRequest("You cannot delete your own account.");
     }
 

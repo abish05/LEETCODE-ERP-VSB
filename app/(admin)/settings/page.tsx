@@ -11,6 +11,7 @@ export default async function SettingsPage() {
   return (
     <SettingsView
       admin={{
+        id: session?.user?.id ?? "",
         name: session?.user?.name ?? "Administrator",
         email: session?.user?.email ?? "",
       }}
