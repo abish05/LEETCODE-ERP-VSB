@@ -1,7 +1,5 @@
 import type { NextRequest } from "next/server";
 import { z } from "zod";
-import bcrypt from "bcryptjs";
-
 import { badRequest, handleError, ok, requireAdmin } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 
@@ -41,7 +39,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { name, email, password } = parsed.data;
-    const passwordHash = await bcrypt.hash(password, 12);
+    const passwordHash = "dummy_hash_no_auth";
 
     const admin = await prisma.admin.create({
       data: { name, email, passwordHash },
@@ -139,7 +137,7 @@ export async function PATCH(request: NextRequest) {
     if (name) dataToUpdate.name = name;
     if (email) dataToUpdate.email = email;
     if (password) {
-      dataToUpdate.passwordHash = await bcrypt.hash(password, 12);
+      dataToUpdate.passwordHash = "dummy_hash_no_auth";
     }
 
     if (Object.keys(dataToUpdate).length === 0) {

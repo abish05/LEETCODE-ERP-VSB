@@ -7,7 +7,6 @@
  *   npm run db:seed
  */
 import { config } from "dotenv";
-import bcrypt from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
 
 import { DEFAULT_SETTINGS } from "../lib/constants";
@@ -31,7 +30,7 @@ async function main() {
     throw new Error("ADMIN_PASSWORD must be at least 8 characters long.");
   }
 
-  const passwordHash = await bcrypt.hash(password, 12);
+  const passwordHash = "dummy_hash_no_auth";
 
   const admin = await prisma.admin.upsert({
     where: { email },
