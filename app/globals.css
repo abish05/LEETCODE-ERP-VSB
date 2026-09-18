@@ -46,7 +46,7 @@
   --ring: #4f46e5;
 
   --navy: #0f172a;
-  --navy-light: #3730a3;
+  --navy-light: #1e3a8a;
   --gold: #6366f1;
   --brand-red: #4f46e5;
 
@@ -91,7 +91,7 @@
   --ring: #6366f1;
 
   --navy: #0d1830;
-  --navy-light: #3730a3;
+  --navy-light: #1e3a8a;
   --gold: #6366f1;
   --brand-red: #6366f1;
 }
@@ -183,7 +183,7 @@
       135deg,
       var(--navy) 0%,
       var(--navy-light) 55%,
-      #4f46e5 100%
+      #1d4ed8 100%
     );
   }
 
