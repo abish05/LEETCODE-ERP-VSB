@@ -96,8 +96,8 @@ export default function LoginPage() {
         </div>
       </section>
 
-      <footer className="fixed bottom-0 left-0 right-0 z-50 bg-[#ffc107] py-3 text-center text-sm font-medium text-black">
-        © 2026 VSB College of Engineering Technical Campus | All Rights Reserved. Developed By <span className="font-bold">Abish, Anand</span>
+      <footer className="fixed bottom-0 left-0 right-0 z-50 bg-navy py-3 text-center text-sm font-medium text-white/80">
+        © 2026 VSB College of Engineering Technical Campus | All Rights Reserved. Developed By <span className="font-bold text-white">Abish, Anand</span>
       </footer>
     </main>
   );

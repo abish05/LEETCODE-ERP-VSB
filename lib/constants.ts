@@ -43,9 +43,9 @@ export const DIFFICULTY_COLORS = {
 
 /** Brand palette, mirrored in `app/globals.css` as CSS custom properties. */
 export const CHART_COLORS = [
-  "#c8102e",
-  "#f5a800",
-  "#1b3a6b",
+  "#4f46e5",
+  "#6366f1",
+  "#3730a3",
   "#00b8a3",
   "#7c3aed",
   "#ff375f",

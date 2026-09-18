@@ -39,7 +39,7 @@ const TYPE_META: Record<
   HIGHEST_STREAK: {
     label: "Streak",
     icon: Flame,
-    tone: "bg-accent/15 text-amber-700 dark:text-amber-300",
+    tone: "bg-accent/15 text-indigo-700 dark:text-indigo-300",
   },
   TOP_DAILY_SOLVER: {
     label: "Top solver",
@@ -64,7 +64,7 @@ const TYPE_META: Record<
   MILESTONE: {
     label: "Milestone",
     icon: TrendingUp,
-    tone: "bg-accent/15 text-amber-700 dark:text-amber-300",
+    tone: "bg-accent/15 text-indigo-700 dark:text-indigo-300",
   },
   SYSTEM: {
     label: "System",

@@ -28,7 +28,7 @@ export function StatCard({
   const accents: Record<string, string> = {
     navy: "bg-navy/10 text-navy dark:bg-navy-light/50 dark:text-sky-200",
     red: "bg-primary/10 text-primary",
-    gold: "bg-accent/15 text-amber-600 dark:text-amber-300",
+    gold: "bg-accent/15 text-indigo-600 dark:text-indigo-300",
     easy: "bg-[color-mix(in_srgb,var(--easy)_14%,transparent)] text-[var(--easy)]",
     medium:
       "bg-[color-mix(in_srgb,var(--medium)_18%,transparent)] text-amber-600 dark:text-[var(--medium)]",
