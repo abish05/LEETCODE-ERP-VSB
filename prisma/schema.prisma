@@ -52,6 +52,18 @@ model Admin {
   @@map("admins")
 }
 
+/// One row per failed admin login. Read as a sliding window to lock out
+/// repeated attempts against the same email without needing Redis.
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  /// Normalised (trimmed, lowercased) email that was attempted.
+  key       String
+  createdAt DateTime @default(now())
+
+  @@index([key, createdAt])
+  @@map("login_attempts")
+}
+
 /// A tracked person (student or staff). They never log in.
 model User {
   id               String     @id @default(cuid())
