@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, Menu, UserCircle2 } from "lucide-react";
+import { Bell, LogOut, Menu, UserCircle2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -32,9 +32,11 @@ function usePageTitle() {
 export function Topbar({
   admin,
   onOpenSidebar,
+  signOutAction,
 }: {
   admin: { name: string; email: string };
   onOpenSidebar: () => void;
+  signOutAction: () => Promise<void>;
 }) {
   const title = usePageTitle();
   const { data: unread } = useApi<{ unread: number }>(
@@ -108,6 +110,15 @@ export function Topbar({
                   <UserCircle2 />
                   Settings
                 </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild variant="destructive">
+                <form action={signOutAction} className="w-full">
+                  <button type="submit" className="flex w-full items-center gap-2">
+                    <LogOut />
+                    Sign out
+                  </button>
+                </form>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

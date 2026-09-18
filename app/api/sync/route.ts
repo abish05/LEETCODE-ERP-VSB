@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { timingSafeEqual } from "node:crypto";
 
+import { auth } from "@/auth";
 import { badRequest, handleError, ok, requireAdmin } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { runSync } from "@/lib/sync";
@@ -41,8 +42,8 @@ async function authorize(request: NextRequest): Promise<boolean> {
     if (constantTimeEquals(header.slice(7).trim(), secret)) return true;
   }
 
-  // Without auth, anyone can trigger this. If you want to protect this, require CRON_SECRET.
-  return true;
+  const session = await auth();
+  return Boolean(session?.user);
 }
 
 export async function POST(request: NextRequest) {
