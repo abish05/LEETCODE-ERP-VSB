@@ -68,6 +68,61 @@ const PROFILE_QUERY = /* GraphQL */ `
   }
 `;
 
+/**
+ * Some accounts make `userCalendar` throw ("no permission to check the
+ * calendar") for reasons unrelated to the account existing — LeetCode's field
+ * is non-nullable, so that error nulls out the entire `matchedUser`, not just
+ * the calendar. This fallback drops the calendar fields so the rest of the
+ * profile (solve counts, ranking, contest rating) still comes through; the
+ * caller treats the missing calendar as empty (zero streak/active days).
+ */
+const PROFILE_QUERY_NO_CALENDAR = /* GraphQL */ `
+  query leettrackUserProfileNoCalendar($username: String!) {
+    matchedUser(username: $username) {
+      username
+      profile {
+        realName
+        userAvatar
+        ranking
+        reputation
+        countryName
+        school
+      }
+      submitStatsGlobal {
+        acSubmissionNum {
+          difficulty
+          count
+          submissions
+        }
+      }
+      submitStats {
+        totalSubmissionNum {
+          difficulty
+          count
+          submissions
+        }
+      }
+    }
+    userContestRanking(username: $username) {
+      attendedContestsCount
+      rating
+      globalRanking
+      topPercentage
+    }
+  }
+`;
+
+/** True if every GraphQL error is scoped to the calendar sub-field rather than the whole query. */
+function isCalendarOnlyError(
+  errors: Array<{ message?: string; path?: Array<string | number> }> | undefined,
+): boolean {
+  if (!errors || errors.length === 0) return false;
+  return errors.every((e) => {
+    const last = e.path?.[e.path.length - 1];
+    return last === "currentYear" || last === "previousYear";
+  });
+}
+
 export interface LeetCodeStats {
   username: string;
   realName: string | null;
@@ -344,6 +399,42 @@ function mapUserNode(
   };
 }
 
+/** Single retry with the calendar fields dropped. Returns `null` on any failure. */
+async function fetchProfileWithoutCalendar(
+  username: string,
+  signal?: AbortSignal,
+): Promise<{ matched: MatchedUserNode; contest: ContestNode } | null> {
+  try {
+    const response = await fetch(LEETCODE_GRAPHQL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Referer: `https://leetcode.com/u/${encodeURIComponent(username)}/`,
+        Origin: "https://leetcode.com",
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      },
+      body: JSON.stringify({
+        query: PROFILE_QUERY_NO_CALENDAR,
+        variables: { username },
+        operationName: "leettrackUserProfileNoCalendar",
+      }),
+      signal,
+      cache: "no-store",
+    });
+    if (!response.ok) return null;
+
+    const payload = (await response.json()) as GraphQLResponse;
+    const matched = payload.data?.matchedUser;
+    if (!matched) return null;
+
+    return { matched, contest: payload.data?.userContestRanking };
+  } catch {
+    return null;
+  }
+}
+
 /** Fetches one public profile. Never throws — always returns a result object. */
 export async function fetchLeetCodeStats(
   rawUsername: string,
@@ -412,16 +503,31 @@ export async function fetchLeetCodeStats(
       const payload = (await response.json()) as GraphQLResponse;
       const matched = payload.data?.matchedUser;
 
-      if (!matched || (payload.errors && payload.errors.some(e => /no permission|private|forbidden/i.test(e.message ?? "")))) {
-        const message = payload.errors?.[0]?.message ?? "Profile not found";
-        // "That user does not exist." is LeetCode's not-found signal.
-        const missing =
-          /does not exist|not found|no permission|private|forbidden/i.test(message) || !payload.errors || !matched;
-        if (missing) {
-          return { ok: false, notFound: true, error: message };
+      if (!matched) {
+        // `userCalendar` is non-nullable in LeetCode's schema, so an account
+        // where it throws (seen as "no permission to check the calendar")
+        // nulls out the whole `matchedUser`, not just the calendar — even
+        // though the account is real and its other fields are fetchable.
+        // Re-fetch without asking for the calendar before giving up on it.
+        if (isCalendarOnlyError(payload.errors)) {
+          const fallback = await fetchProfileWithoutCalendar(
+            username,
+            controller.signal,
+          );
+          if (fallback) {
+            return {
+              ok: true,
+              stats: mapUserNode(
+                fallback.matched,
+                fallback.contest,
+                username,
+              ),
+            };
+          }
         }
-        lastError = message;
-        continue;
+
+        const message = payload.errors?.[0]?.message ?? "That user does not exist.";
+        return { ok: false, notFound: true, error: message };
       }
 
       return {
@@ -575,21 +681,36 @@ export async function fetchLeetCodeStatsBatch(
 
       // Errors carry the failing alias in `path`, which is how we attribute a
       // "does not exist" to the right student rather than the whole batch.
-      const messageByAlias = new Map<string, string>();
+      const errorsByAlias = new Map<
+        string,
+        Array<{ message?: string; path?: Array<string | number> }>
+      >();
       for (const err of payload.errors ?? []) {
         const alias = err.path?.[0];
-        if (typeof alias === "string" && err.message) {
-          messageByAlias.set(alias, err.message);
+        if (typeof alias === "string") {
+          const list = errorsByAlias.get(alias) ?? [];
+          list.push(err);
+          errorsByAlias.set(alias, list);
         }
       }
 
+      // Same non-null-calendar quirk as the single-profile path — the alias
+      // comes back null even though the account is real. Re-fetch those
+      // specific usernames without the calendar instead of failing them.
+      const needsFallback: Array<{ entry: { raw: string; clean: string }; alias: string }> = [];
+
       usable.forEach((entry, i) => {
-        const node = payload.data?.[`u${i}`] as MatchedUserNode | null | undefined;
+        const alias = `u${i}`;
+        const node = payload.data?.[alias] as MatchedUserNode | null | undefined;
         if (!node) {
+          if (isCalendarOnlyError(errorsByAlias.get(alias))) {
+            needsFallback.push({ entry, alias });
+            return;
+          }
           results.set(entry.raw, {
             ok: false,
             notFound: true,
-            error: messageByAlias.get(`u${i}`) ?? "That user does not exist.",
+            error: errorsByAlias.get(alias)?.[0]?.message ?? "That user does not exist.",
           });
           return;
         }
@@ -599,6 +720,32 @@ export async function fetchLeetCodeStatsBatch(
           stats: mapUserNode(node, contest, entry.clean),
         });
       });
+
+      if (needsFallback.length > 0) {
+        await Promise.all(
+          needsFallback.map(async ({ entry, alias }) => {
+            const fallback = await fetchProfileWithoutCalendar(
+              entry.clean,
+              controller.signal,
+            );
+            results.set(
+              entry.raw,
+              fallback
+                ? {
+                    ok: true,
+                    stats: mapUserNode(fallback.matched, fallback.contest, entry.clean),
+                  }
+                : {
+                    ok: false,
+                    notFound: true,
+                    error:
+                      errorsByAlias.get(alias)?.[0]?.message ??
+                      "That user does not exist.",
+                  },
+            );
+          }),
+        );
+      }
 
       return results;
     } catch (error) {
