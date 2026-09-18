@@ -8,11 +8,9 @@ import { Topbar } from "./topbar";
 
 export function AdminShell({
   admin,
-  signOutAction,
   children,
 }: {
   admin: { name: string; email: string };
-  signOutAction: () => Promise<void>;
   children: React.ReactNode;
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -29,7 +27,6 @@ export function AdminShell({
         <Topbar
           admin={admin}
           onOpenSidebar={() => setSidebarOpen(true)}
-          signOutAction={signOutAction}
         />
         <main className="px-4 py-6 lg:px-6 lg:py-8">{children}</main>
       </div>
